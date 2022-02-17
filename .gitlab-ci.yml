@@ -1,0 +1,93 @@
+image: registry.access.redhat.com/ubi8/openjdk-11:1.10-1
+stages:
+  - compile
+  - test
+  - publish
+  - ocp
+  
+build:
+  stage: compile
+  script:
+    - mkdir -p ~/.gradle
+#    - echo "org.gradle.daemon=false" >> ~/.gradle/gradle.properties
+    - sh ./gradlew --no-daemon bootJar
+  artifacts:
+    paths:
+    - build/libs/spring-boot-0.0.1-SNAPSHOT.jar
+    expire_in: 20 minutes
+  tags:
+    - gitlab3
+
+SpotBugsCheck:
+  stage: test
+  before_script:
+    - wget https://github.com/spotbugs/spotbugs/releases/download/4.5.0/spotbugs-4.5.0.zip
+    - unzip -q spotbugs-4.5.0.zip
+    - chmod 755 spotbugs-4.5.0/bin/*
+  script:
+    - echo ./spotbugs-4.5.0/bin/spotbugs src
+  tags:
+    - gitlab3
+OWASPdepCheck:
+  stage: test
+  before_script:
+    - wget https://github.com/jeremylong/DependencyCheck/releases/download/v6.5.0/dependency-check-6.5.0-release.zip
+    - unzip -q dependency-check-6.5.0-release.zip
+  script:
+    - ./dependency-check/bin/dependency-check.sh --project "Test" --scan src -f JUNIT
+  artifacts:
+    when: always
+    reports:
+      junit: dependency-check-junit.xml
+  tags:
+    - gitlab3 
+
+docker-build:
+  stage: compile
+  script:
+    - docker build -t ocp-java-ubi8 .
+  tags:
+    - gitlab3
+
+docker-test:
+  stage: test
+  before_script:
+    - docker run -d --rm -p 8080:8080 --name ocp-java-ubi8-${CI_PIPELINE_ID} ocp-java-ubi8
+  script:
+    - sleep 15
+    - curl http://localhost:8080
+  after_script:
+    - docker kill ocp-java-ubi8-${CI_PIPELINE_ID}
+  tags:
+    - gitlab3
+
+publish:
+  stage: publish
+  script:
+    - docker login -u $targetDockerRepositoryUser -p $targetDockerRepositoryPassword $targetDockerRepositoryUrl
+    - docker tag ocp-java-ubi8 $targetDockerRepositoryUrl/test/ocp-java-ubi8:${CI_PIPELINE_ID}
+    - docker tag ocp-java-ubi8 $targetDockerRepositoryUrl/test/ocp-java-ubi8:latest
+    - docker push $targetDockerRepositoryUrl/test/ocp-java-ubi8:${CI_PIPELINE_ID}
+    - docker push $targetDockerRepositoryUrl/test/ocp-java-ubi8:latest
+  after_script:
+    - docker rmi ocp-java-ubi8:latest
+    - docker rmi $targetDockerRepositoryUrl/test/ocp-java-ubi8:${CI_PIPELINE_ID}
+    - docker rmi $targetDockerRepositoryUrl/test/ocp-java-ubi8:latest
+    - docker image prune -f
+  tags:
+    - gitlab3
+  needs:
+    - job: docker-test
+
+ocp-check:
+  stage: ocp
+  tags: [openshift, shell]
+  script:
+    - |
+      OC_TMP="$(mktemp)"
+      echo "oc login -s $okd4Url -u $openShiftUser -p $openShiftPassword --kubeconfig=$OC_TMP --insecure-skip-tls-verify"
+      oc login -s "$okd4Url" -u "$openShiftUser" -p "$openShiftPassword" --kubeconfig="$OC_TMP" --insecure-skip-tls-verify
+    - env | sort
+    - find .
+  needs:
+    - job: publish

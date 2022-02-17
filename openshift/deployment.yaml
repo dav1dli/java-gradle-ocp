@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+  name: ocp-java-ubi8
+  labels:
+    app: ocp-java-ubi8
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ocp-java-ubi8
+  template:
+    metadata:
+      labels:
+        app: ocp-java-ubi8
+        deployment: ocp-java-ubi8
+    spec:
+      containers:
+        - name: ocp-java-ubi8
+          image: myrepo.docker.com:60001/test/ocp-java-ubi8:latest
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+            - containerPort: 8443
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      imagePullSecrets:
+        - name: nexus-pull
+      restartPolicy: Always
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%

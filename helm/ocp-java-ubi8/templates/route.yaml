@@ -1,0 +1,23 @@
+{{- if .Values.route.enabled -}}
+{{- $fullName := include "ocp-java-ubi8.fullname" . -}}
+{{- $svcPort := .Values.service.port -}}
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "ocp-java-ubi8.labels" . | nindent 4 }}
+  {{- with .Values.route.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  to:
+    kind: Service
+    name: {{ $fullName }}
+    weight: 100
+  port:
+    targetPort: {{ $svcPort }}
+  wildcardPolicy: None
+{{- end }}

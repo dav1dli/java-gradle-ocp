@@ -1,0 +1,14 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: ocp-java-ubi8
+  labels:
+    app: ocp-java-ubi8
+spec:
+  to:
+    kind: Service
+    name: ocp-java-ubi8
+    weight: 100
+  port:
+    targetPort: 8080-tcp
+  wildcardPolicy: None
